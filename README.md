@@ -44,11 +44,10 @@ Asteroid BLASTER is a fast-paced browser-based space shooter game built using HT
 4. Star, Share, and let me know whether you like it or it needs some improvements!
 
 ### 🎯 Controls
-Action  | Key
-Move    | WASD / Arrow Keys
-Shoot   | Spacebar
-Aim     | Mouse
-Mobile  | Touch
+- Move — WASD / Arrow Keys
+- Shoot — Spacebar
+- Aim — Mouse
+- Mobile — Touch
 
 
 ### 🕹️ Gameplay
@@ -71,8 +70,8 @@ A Rising Developer | AI Enthusiast
 
 ### ⭐ Support
 If you like this project:
-⭐ Star the repo
-🍴 Fork it
-📢 Share it
+- ⭐ Star the repo
+- 🍴 Fork it
+- 📢 Share it
 
 Thankyou,
