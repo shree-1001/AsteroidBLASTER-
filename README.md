@@ -1,4 +1,4 @@
-### 🚀 Asteroid BLASTER 🛡️💥  
+# 🚀 Asteroid BLASTER 🛡️💥  
 Responsive Space Shooter Game with Firebase Leaderboard
 
 ---
@@ -51,22 +51,22 @@ Asteroid BLASTER is a fast-paced browser-based space shooter game built using HT
 
 
 ### 🕹️ Gameplay
-Destroy asteroids to gain points
-Avoid enemy attacks
-Use power-ups strategically
-Survive and reach higher levels
-Compete in leaderboard
+- Destroy asteroids to gain points
+- Avoid enemy attacks
+- Use power-ups strategically
+- Survive and reach higher levels
+- Compete in leaderboard
 
-## 📈 Future Improvements
-Multiplayer mode
-Sound effects & music
-Boss battles
-User profiles
-Custom themes
+### 📈 Future Improvements
+- Multiplayer mode
+- Sound effects & music
+- Boss battles
+- User profiles
+- Custom themes
 
 ### 👨‍💻 Author
 Adarsh Srivastava
-A Rising Developer | AI Enthusiast
+- A Rising Developer | AI Enthusiast
 
 ### ⭐ Support
 If you like this project:
