@@ -1,0 +1,1165 @@
+
+
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Responsive Asteroid Shooter</title>
+    <script type="module">
+        import { initializeApp } from "https://www.gstatic.com/firebasejs/11.6.1/firebase-app.js";
+        import { getAuth, signInAnonymously, signInWithCustomToken, onAuthStateChanged } from "https://www.gstatic.com/firebasejs/11.6.1/firebase-auth.js";
+        import { getFirestore, collection, addDoc, getDocs, onSnapshot, doc, getDoc, setDoc, updateDoc } from "https://www.gstatic.com/firebasejs/11.6.1/firebase-firestore.js";
+        
+        // Firebase configuration and initialization
+        const firebaseConfig = JSON.parse(typeof __firebase_config !== 'undefined' ? __firebase_config : '{}');
+        const app = initializeApp(firebaseConfig);
+        const db = getFirestore(app);
+        const auth = getAuth(app);
+        let userId = '';
+        let appId = typeof __app_id !== 'undefined' ? __app_id : 'default-app-id';
+        let highScoresCollectionRef;
+
+        async function initFirebase() {
+            try {
+                if (typeof __initial_auth_token !== 'undefined') {
+                    await signInWithCustomToken(auth, __initial_auth_token);
+                } else {
+                    await signInAnonymously(auth);
+                }
+                onAuthStateChanged(auth, async (user) => {
+                    if (user) {
+                        userId = user.uid;
+                        highScoresCollectionRef = collection(db, `/artifacts/${appId}/public/data/highScores`);
+                        console.log("Firebase initialized and authenticated successfully.");
+                        getHighScores();
+                        document.getElementById('userIdDisplay').textContent = `User ID: ${userId}`;
+                    } else {
+                        console.log("User is signed out.");
+                    }
+                });
+            } catch (error) {
+                console.error("Firebase initialization failed: ", error);
+            }
+        }
+
+        async function saveHighScore(score) {
+            try {
+                if (!highScoresCollectionRef) {
+                    console.error("High scores collection reference not initialized.");
+                    return;
+                }
+                const docRef = await addDoc(highScoresCollectionRef, {
+                    score: score,
+                    userId: userId,
+                    timestamp: new Date()
+                });
+                console.log("Document written with ID: ", docRef.id);
+            } catch (e) {
+                console.error("Error adding document: ", e);
+            }
+        }
+
+        async function getHighScores() {
+            try {
+                if (!highScoresCollectionRef) {
+                    console.error("High scores collection reference not initialized.");
+                    return [];
+                }
+                const querySnapshot = await getDocs(highScoresCollectionRef);
+                let scores = [];
+                querySnapshot.forEach((doc) => {
+                    scores.push(doc.data());
+                });
+                scores.sort((a, b) => b.score - a.score);
+                displayHighScores(scores.slice(0, 10)); // Get top 10 scores
+                return scores;
+            } catch (e) {
+                console.error("Error getting documents: ", e);
+                return [];
+            }
+        }
+
+        function displayHighScores(scores) {
+            const highScoresList = document.getElementById('highScoresList');
+            highScoresList.innerHTML = '';
+            if (scores.length === 0) {
+                highScoresList.innerHTML = '<p>No scores yet. Be the first!</p>';
+                return;
+            }
+            scores.forEach((s, index) => {
+                const li = document.createElement('li');
+                li.innerHTML = `<span>#${index + 1}</span> <span>${s.score}</span> <span>by ${s.userId}</span>`;
+                highScoresList.appendChild(li);
+            });
+        }
+
+        window.saveHighScore = saveHighScore;
+        window.getHighScores = getHighScores;
+        window.onload = initFirebase;
+    </script>
+    <style>
+        @import url('https://fonts.googleapis.com/css2?family=Orbitron:wght@400;700&display=swap');
+        
+        html, body {
+            margin: 0;
+            padding: 0;
+            overflow: hidden;
+            background-color: #000;
+            color: #fff;
+            font-family: 'Orbitron', sans-serif;
+            display: flex;
+            justify-content: center;
+            align-items: center;
+            height: 100vh;
+            width: 100vw;
+        }
+
+        canvas {
+            background-color: #000;
+            border: 2px solid #0f0;
+            box-shadow: 0 0 15px #0f0, inset 0 0 15px #0f0;
+            display: block;
+            width: 100%;
+            height: 100%;
+        }
+
+        .game-container {
+            position: relative;
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            height: 100vh;
+            width: 100vw;
+        }
+
+        .ui {
+            position: absolute;
+            top: 20px;
+            left: 50%;
+            transform: translateX(-50%);
+            display: flex;
+            justify-content: space-between;
+            width: 80%;
+            max-width: 800px;
+            font-size: 1.5rem;
+            text-shadow: 0 0 5px #0f0;
+            flex-wrap: wrap;
+        }
+
+        .score, .health, .level, .instructions, .game-over, .level-up {
+            padding: 10px 20px;
+            background: rgba(0, 0, 0, 0.5);
+            border: 1px solid #0f0;
+            border-radius: 10px;
+            box-shadow: 0 0 10px #0f0;
+            white-space: nowrap;
+            margin: 5px;
+        }
+
+        .instructions {
+            position: absolute;
+            top: 50%;
+            left: 50%;
+            transform: translate(-50%, -50%);
+            text-align: center;
+            font-size: 1.5rem;
+            line-height: 1.6;
+            background: rgba(0, 0, 0, 0.7);
+            padding: 30px;
+            border: 2px solid #0f0;
+            border-radius: 15px;
+            box-shadow: 0 0 20px #0f0;
+            display: block;
+            z-index: 100;
+        }
+
+        .instructions button {
+            margin-top: 20px;
+            padding: 15px 40px;
+            font-size: 1.5rem;
+            font-family: 'Orbitron', sans-serif;
+            background-color: #0f0;
+            border: none;
+            border-radius: 8px;
+            cursor: pointer;
+            transition: all 0.3s ease;
+        }
+
+        .instructions button:hover {
+            background-color: #0a0;
+            box-shadow: 0 0 10px #0f0;
+            transform: scale(1.05);
+        }
+
+        .game-over {
+            position: absolute;
+            top: 50%;
+            left: 50%;
+            transform: translate(-50%, -50%);
+            text-align: center;
+            font-size: 2rem;
+            background: rgba(0, 0, 0, 0.8);
+            padding: 40px;
+            border: 3px solid #f00;
+            border-radius: 20px;
+            box-shadow: 0 0 25px #f00;
+            display: none;
+            z-index: 100;
+        }
+
+        .game-over button {
+            margin-top: 20px;
+            padding: 10px 30px;
+            font-size: 1.2rem;
+            font-family: 'Orbitron', sans-serif;
+            background-color: #0f0;
+            border: none;
+            border-radius: 8px;
+            cursor: pointer;
+            transition: all 0.3s ease;
+        }
+
+        .game-over button:hover {
+            background-color: #0a0;
+            box-shadow: 0 0 10px #0f0;
+            transform: scale(1.05);
+        }
+
+        .level-up {
+            position: absolute;
+            top: 50%;
+            left: 50%;
+            transform: translate(-50%, -50%);
+            font-size: 3rem;
+            text-align: center;
+            display: none; /* Hidden by default */
+            z-index: 200;
+            color: #0f0;
+            text-shadow: 0 0 20px #0f0;
+        }
+
+        .powerup-button-container {
+            position: absolute;
+            top: 50%;
+            transform: translateY(-50%);
+            display: flex;
+            flex-direction: column;
+            gap: 15px;
+        }
+
+        #rightButtons {
+            right: 20px;
+        }
+
+        .powerup-button {
+            padding: 15px 25px;
+            font-size: 1.2rem;
+            font-family: 'Orbitron', sans-serif;
+            border: 2px solid #0f0;
+            background-color: rgba(0, 0, 0, 0.7);
+            color: #0f0;
+            border-radius: 10px;
+            cursor: pointer;
+            transition: all 0.3s ease;
+            box-shadow: 0 0 10px #0f0;
+        }
+
+        .powerup-button.circular {
+            border-radius: 50%;
+            width: 60px;
+            height: 60px;
+            display: flex;
+            justify-content: center;
+            align-items: center;
+            padding: 0;
+            background-color: transparent;
+            border: 2px solid #007bff;
+        }
+
+        .powerup-button.circular .icon-text {
+            display: none;
+        }
+
+        .powerup-button:disabled {
+            border-color: #555;
+            color: #555;
+            box-shadow: none;
+            cursor: not-allowed;
+        }
+
+        .powerup-button.active {
+            background-color: #0f0;
+            color: #000;
+            box-shadow: 0 0 20px #0f0;
+        }
+
+        .shield-active {
+            animation: shield-glow 1s infinite alternate;
+        }
+
+        .health-bar {
+            width: 150px;
+            height: 20px;
+            background: #444;
+            border: 1px solid #0f0;
+            border-radius: 5px;
+            margin-top: 10px;
+            overflow: hidden;
+        }
+
+        .health-fill {
+            height: 100%;
+            background: #f00;
+            transition: width 0.3s ease;
+        }
+
+        .high-scores {
+            margin-top: 20px;
+            text-align: left;
+            border-top: 2px solid #0f0;
+            padding-top: 10px;
+            width: 80%;
+        }
+
+        .high-scores h2 {
+            font-size: 1.5rem;
+            text-align: center;
+        }
+
+        .high-scores ul {
+            list-style: none;
+            padding: 0;
+        }
+
+        .high-scores li {
+            font-size: 1rem;
+            display: flex;
+            justify-content: space-between;
+            padding: 5px 0;
+            border-bottom: 1px dashed #0a0;
+        }
+
+        .high-scores li:last-child {
+            border-bottom: none;
+        }
+
+        .user-id-display {
+            position: absolute;
+            bottom: 10px;
+            left: 10px;
+            font-size: 0.8rem;
+            color: #0f0;
+        }
+
+        @keyframes shield-glow {
+            from {
+                box-shadow: 0 0 5px 5px #0ff;
+            }
+            to {
+                box-shadow: 0 0 15px 15px #0ff;
+            }
+        }
+
+        /* New CSS for requested changes */
+        .powerup-button.circular {
+            background-color: transparent;
+            border: 2px solid #007bff;
+            color: #fff;
+        }
+
+        .powerup-button.circular:hover {
+            background-color: rgba(0, 123, 255, 0.2);
+        }
+
+        /* New blinking animation for power-up buttons */
+        @keyframes blink-pink {
+            0% {
+                box-shadow: 0 0 10px #0f0;
+            }
+            50% {
+                box-shadow: 0 0 20px 5px #ff69b4;
+            }
+            100% {
+                box-shadow: 0 0 10px #0f0;
+            }
+        }
+
+        .blinking-ready {
+            animation: blink-pink 1.5s infinite;
+        }
+    </style>
+</head>
+<body>
+    <div class="game-container">
+        <div class="ui">
+            <div class="score">Score: 0</div>
+            <div class="health">Health: 100</div>
+            <div class="level">Level: 1</div>
+        </div>
+        <canvas id="gameCanvas"></canvas>
+        <div class="instructions" id="instructions">
+            <h1>Asteroid Shooter</h1>
+            <p>Use WASD or Arrow Keys to move</p>
+            <p>Press Spacebar to shoot</p>
+            <p>Asteroids take 1 shot. Enemy ships take 3 shots.</p>
+            <p>Shoot the 🔋 to fully restore your health! (Requires 3 shots)</p>
+            <p>Use your power-ups strategically to take down tougher enemies.</p>
+            <button id="startButton">Start Game</button>
+        </div>
+        <div class="game-over" id="gameOver">
+            <h1>Game Over</h1>
+            <p>Your Final Score: <span id="finalScore">0</span></p>
+            <div class="high-scores">
+                <h2>High Scores</h2>
+                <ul id="highScoresList"></ul>
+            </div>
+            <button onclick="window.location.reload()">Play Again</button>
+        </div>
+        <div class="level-up" id="levelUp">Level 1</div>
+        <div class="powerup-button-container" id="rightButtons">
+            <button id="shieldBtn" class="powerup-button circular" onclick="showComment()">🛡️</button>
+            <button id="rapidFireBtn" class="powerup-button circular" onclick="showComment()">🔥</button>
+            <button id="tripleShotBtn" class="powerup-button circular" onclick="showComment()">🔱</button>
+        </div>
+        <div class="user-id-display" id="userIdDisplay"></div>
+    </div>
+    <script>
+        document.addEventListener('DOMContentLoaded', () => {
+            const canvas = document.getElementById('gameCanvas');
+            const ctx = canvas.getContext('2d');
+            const scoreDisplay = document.querySelector('.score');
+            const healthDisplay = document.querySelector('.health');
+            const levelDisplay = document.querySelector('.level');
+            const instructions = document.getElementById('instructions');
+            const startButton = document.getElementById('startButton');
+            const gameOverScreen = document.getElementById('gameOver');
+            const finalScoreDisplay = document.getElementById('finalScore');
+            const levelUpMessage = document.getElementById('levelUp');
+            const shieldBtn = document.getElementById('shieldBtn');
+            const rapidFireBtn = document.getElementById('rapidFireBtn');
+            const tripleShotBtn = document.getElementById('tripleShotBtn');
+            const userIdDisplay = document.getElementById('userIdDisplay');
+            const rightButtonsContainer = document.getElementById('rightButtons');
+            
+            let responsiveScale = 1;
+
+            function setCanvasSizeAndScale() {
+                canvas.width = window.innerWidth;
+                canvas.height = window.innerHeight;
+                responsiveScale = Math.min(canvas.width, canvas.height) / 800;
+                updateUIStyles();
+            }
+
+            function updateUIStyles() {
+                const uiElements = [scoreDisplay, healthDisplay, levelDisplay];
+                uiElements.forEach(el => {
+                    el.style.fontSize = `${1.5 * responsiveScale}rem`;
+                    el.style.padding = `${10 * responsiveScale}px ${20 * responsiveScale}px`;
+                    el.style.borderRadius = `${10 * responsiveScale}px`;
+                });
+
+                instructions.style.fontSize = `${1.5 * responsiveScale}rem`;
+                instructions.style.lineHeight = `${1.6 * responsiveScale}`;
+                instructions.style.padding = `${30 * responsiveScale}px`;
+                instructions.style.borderWidth = `${2 * responsiveScale}px`;
+                instructions.style.borderRadius = `${15 * responsiveScale}px`;
+                instructions.querySelector('h1').style.fontSize = `${2 * responsiveScale}rem`;
+                instructions.querySelector('button').style.marginTop = `${20 * responsiveScale}px`;
+                instructions.querySelector('button').style.padding = `${15 * responsiveScale}px ${40 * responsiveScale}px`;
+                instructions.querySelector('button').style.fontSize = `${1.5 * responsiveScale}rem`;
+
+                gameOverScreen.style.fontSize = `${2 * responsiveScale}rem`;
+                gameOverScreen.style.padding = `${40 * responsiveScale}px`;
+                gameOverScreen.style.borderWidth = `${3 * responsiveScale}px`;
+                gameOverScreen.style.borderRadius = `${20 * responsiveScale}px`;
+                gameOverScreen.querySelector('h1').style.fontSize = `${2.5 * responsiveScale}rem`;
+                gameOverScreen.querySelector('button').style.marginTop = `${20 * responsiveScale}px`;
+                gameOverScreen.querySelector('button').style.padding = `${10 * responsiveScale}px ${30 * responsiveScale}px`;
+                gameOverScreen.querySelector('button').style.fontSize = `${1.2 * responsiveScale}rem`;
+
+                levelUpMessage.style.fontSize = `${3 * responsiveScale}rem`;
+                rightButtonsContainer.style.gap = `${15 * responsiveScale}px`;
+                
+                const powerUpBtns = document.querySelectorAll('.powerup-button');
+                powerUpBtns.forEach(btn => {
+                    btn.style.padding = `${15 * responsiveScale}px ${25 * responsiveScale}px`;
+                    btn.style.fontSize = `${1.2 * responsiveScale}rem`;
+                    btn.style.borderWidth = `${2 * responsiveScale}px`;
+                    btn.style.borderRadius = `10px`;
+                });
+
+                const circularBtns = document.querySelectorAll('.powerup-button.circular');
+                circularBtns.forEach(btn => {
+                    const size = 60 * responsiveScale;
+                    btn.style.width = `${size}px`;
+                    btn.style.height = `${size}px`;
+                    btn.style.borderRadius = '50%';
+                    btn.style.padding = '0';
+                    btn.style.display = 'flex';
+                    btn.style.justifyContent = 'center';
+                    btn.style.alignItems = 'center';
+                });
+                userIdDisplay.style.fontSize = `${0.8 * responsiveScale}rem`;
+                userIdDisplay.style.bottom = `${10 * responsiveScale}px`;
+                userIdDisplay.style.left = `${10 * responsiveScale}px`;
+
+                const highScoresList = document.getElementById('highScoresList');
+                highScoresList.parentElement.style.marginTop = `${20 * responsiveScale}px`;
+                highScoresList.parentElement.style.paddingTop = `${10 * responsiveScale}px`;
+                highScoresList.parentElement.querySelector('h2').style.fontSize = `${1.5 * responsiveScale}rem`;
+                highScoresList.querySelectorAll('li').forEach(li => {
+                    li.style.fontSize = `${1 * responsiveScale}rem`;
+                    li.style.padding = `${5 * responsiveScale}px 0`;
+                });
+            }
+
+            let score = 0;
+            let health = 100;
+            let level = 1;
+            let gameRunning = false;
+            let asteroids = [];
+            let bullets = [];
+            let enemyShips = [];
+            let enemyBullets = [];
+            let keys = {};
+            let lastAsteroidSpawnTime = 0;
+            let asteroidSpawnInterval = 1000;
+            let lastFireTime = 0;
+            let fireInterval = 50;
+            const powerUpDuration = 20000;
+            let isShieldActive = false;
+            let isRapidFireActive = false;
+            let isTripleShotActive = false;
+            let nextPowerUpScore = 450;
+            let nextHealthRefillerScore = 250;
+            let healthRefillers = [];
+            let activePowerUpTimeout = null;
+
+            const spaceship = {
+                x: canvas.width / 2,
+                y: canvas.height / 2,
+                radius: 15,
+                speed: 5,
+                angle: 0
+            };
+
+            const PowerUpType = {
+                SHIELD: 'shield',
+                RAPID_FIRE: 'rapid_fire',
+                TRIPLE_SHOT: 'triple_shot'
+            };
+
+            // Health Refiller Class with health property
+            class HealthRefiller {
+                constructor() {
+                    this.x = Math.random() * canvas.width;
+                    this.y = 0;
+                    this.width = 30 * responsiveScale;
+                    this.height = 30 * responsiveScale;
+                    this.speed = (0.5 + level * 0.1) * responsiveScale;
+                    this.health = 3; // Now takes 3 shots
+                }
+                
+                draw() {
+                    ctx.fillStyle = '#007bff';
+                    ctx.font = `${this.width}px Arial`;
+                    ctx.textAlign = 'center';
+                    ctx.fillText('🔋', this.x, this.y);
+                    
+                    // Draw health text
+                    ctx.fillStyle = '#fff';
+                    ctx.font = `${10 * responsiveScale}px Orbitron`;
+                    ctx.textAlign = 'center';
+                    ctx.fillText(this.health, this.x, this.y + this.height / 2 + (5 * responsiveScale));
+                }
+
+                update() {
+                    this.y += this.speed;
+                }
+            }
+
+            class Asteroid {
+                constructor(radius, x, y) {
+                    this.baseRadius = radius || (Math.random() * 20 + 10);
+                    this.radius = this.baseRadius * responsiveScale;
+                    this.x = x || (Math.random() > 0.5 ? (Math.random() > 0.5 ? 0 - this.radius : canvas.width + this.radius) : Math.random() * canvas.width);
+                    this.y = y || (this.x === Math.random() * canvas.width ? (Math.random() > 0.5 ? 0 - this.radius : canvas.height + this.radius) : Math.random() * canvas.height);
+                    const angle = Math.atan2(spaceship.y - this.y, spaceship.x - this.x);
+                    this.dx = Math.cos(angle) * (Math.random() * 2 + 1) * (1 + level * 0.2) * responsiveScale;
+                    this.dy = Math.sin(angle) * (Math.random() * 2 + 1) * (1 + level * 0.2) * responsiveScale;
+                    this.health = 1;
+                    this.points = this.baseRadius > 25 ? 30 : (this.baseRadius > 15 ? 20 : 10);
+                }
+                
+                draw() {
+                    ctx.beginPath();
+                    ctx.arc(this.x, this.y, this.radius, 0, Math.PI * 2);
+                    ctx.strokeStyle = '#0f0';
+                    ctx.lineWidth = 2 * responsiveScale;
+                    ctx.stroke();
+                    ctx.closePath();
+                }
+
+                update() {
+                    this.x += this.dx;
+                    this.y += this.dy;
+                }
+            }
+
+            class EnemyShip {
+                constructor() {
+                    this.x = Math.random() * canvas.width;
+                    this.y = 0;
+                    this.width = 25 * responsiveScale;
+                    this.height = 25 * responsiveScale;
+                    this.speed = (1.5 + level * 0.1) * responsiveScale;
+                    this.health = 3;
+                    this.maxHealth = 3;
+                    this.fireInterval = 1000 - level * 50;
+                    if (this.fireInterval < 200) this.fireInterval = 150;
+                    this.lastFireTime = Date.now();
+                }
+
+                draw() {
+                    ctx.save();
+                    ctx.translate(this.x, this.y);
+                    ctx.fillStyle = '#f00';
+                    ctx.beginPath();
+                    ctx.moveTo(0, -this.height/2);
+                    ctx.lineTo(this.width/2, this.height/2);
+                    ctx.lineTo(-this.width/2, this.height/2);
+                    ctx.closePath();
+                    ctx.fill();
+
+                    ctx.fillStyle = '#fff';
+                    ctx.font = `${10 * responsiveScale}px Orbitron`;
+                    ctx.textAlign = 'center';
+                    ctx.fillText(this.health, 0, this.height + (5 * responsiveScale));
+                    ctx.restore();
+                }
+
+                update() {
+                    const dx = spaceship.x - this.x;
+                    const dy = spaceship.y - this.y;
+                    const distance = Math.sqrt(dx*dx + dy*dy);
+                    this.x += (dx / distance) * this.speed;
+                    this.y += (dy / distance) * this.speed;
+                    
+                    if (Date.now() - this.lastFireTime > this.fireInterval) {
+                        const angle = Math.atan2(spaceship.y - this.y, spaceship.x - this.x);
+                        enemyBullets.push(new Bullet(this.x, this.y, angle, '#f00'));
+                        this.lastFireTime = Date.now();
+                    }
+                }
+            }
+
+            class Bullet {
+                constructor(x, y, angle, color = '#0f0') {
+                    this.x = x;
+                    this.y = y;
+                    this.radius = 3 * responsiveScale;
+                    this.speed = 7 * responsiveScale;
+                    this.dx = Math.cos(angle) * this.speed;
+                    this.dy = Math.sin(angle) * this.speed;
+                    this.color = color;
+                }
+                
+                draw() {
+                    ctx.beginPath();
+                    ctx.arc(this.x, this.y, this.radius, 0, Math.PI * 2);
+                    ctx.fillStyle = this.color;
+                    ctx.fill();
+                    ctx.closePath();
+                }
+
+                update() {
+                    this.x += this.dx;
+                    this.y += this.dy;
+                }
+            }
+
+            class Particle {
+                constructor(x, y, color) {
+                    this.x = x;
+                    this.y = y;
+                    this.size = (Math.random() * 5 + 1) * responsiveScale;
+                    this.speedX = (Math.random() * 3 - 1.5) * responsiveScale;
+                    this.speedY = (Math.random() * 3 - 1.5) * responsiveScale;
+                    this.color = color;
+                    this.life = 100;
+                }
+                
+                update() {
+                    this.x += this.speedX;
+                    this.y += this.speedY;
+                    this.life -= 1;
+                }
+                
+                draw() {
+                    ctx.fillStyle = this.color;
+                    ctx.fillRect(this.x, this.y, this.size, this.size);
+                }
+            }
+
+            let particles = [];
+            
+            function handleExplosion(x, y) {
+                for (let i = 0; i < 10; i++) {
+                    particles.push(new Particle(x, y, '#0f0'));
+                }
+            }
+
+            function drawSpaceship() {
+                ctx.save();
+                ctx.translate(spaceship.x, spaceship.y);
+                ctx.rotate(spaceship.angle);
+                ctx.beginPath();
+                ctx.moveTo(15 * responsiveScale, 0);
+                ctx.lineTo(-15 * responsiveScale, -10 * responsiveScale);
+                ctx.lineTo(-15 * responsiveScale, 10 * responsiveScale);
+                ctx.fillStyle = '#fff';
+                ctx.fill();
+                ctx.closePath();
+
+                ctx.beginPath();
+                ctx.moveTo(-15 * responsiveScale, -5 * responsiveScale);
+                ctx.lineTo(-25 * responsiveScale, 0);
+                ctx.lineTo(-15 * responsiveScale, 5 * responsiveScale);
+                ctx.fillStyle = 'orange';
+                ctx.fill();
+                ctx.closePath();
+                
+                if (isShieldActive) {
+                    ctx.beginPath();
+                    ctx.arc(0, 0, spaceship.radius + (10 * responsiveScale), 0, Math.PI * 2);
+                    ctx.strokeStyle = '#0ff';
+                    ctx.lineWidth = 3 * responsiveScale;
+                    ctx.stroke();
+                    ctx.closePath();
+                }
+                ctx.restore();
+            }
+
+            function updateSpaceship() {
+                const currentSpeed = spaceship.speed * responsiveScale;
+                
+                if (keys['ArrowUp'] || keys['w']) {
+                    spaceship.y -= currentSpeed;
+                }
+                if (keys['ArrowDown'] || keys['s']) {
+                    spaceship.y += currentSpeed;
+                }
+                if (keys['ArrowLeft'] || keys['a']) {
+                    spaceship.x -= currentSpeed;
+                }
+                if (keys['ArrowRight'] || keys['d']) {
+                    spaceship.x += currentSpeed;
+                }
+
+                const radius = spaceship.radius * responsiveScale;
+                spaceship.x = Math.max(radius, Math.min(canvas.width - radius, spaceship.x));
+                spaceship.y = Math.max(radius, Math.min(canvas.height - radius, spaceship.y));
+
+                const dx = mouse.x - spaceship.x;
+                const dy = mouse.y - spaceship.y;
+                spaceship.angle = Math.atan2(dy, dx);
+            }
+
+            function showComment() {
+      var text = document.getElementById("comment-text");
+      // Toggle the display style
+      if (text.style.display === "none" || text.style.display === "") {
+        text.style.display = "block";
+      } else {
+        text.style.display = "none";
+      }
+    }
+
+function spawnAsteroids() {
+                const currentTime = Date.now();
+                if (currentTime - lastAsteroidSpawnTime > asteroidSpawnInterval) {
+                    const randomRadius = Math.random() > 0.8 ? 30 : (Math.random() > 0.5 ? 20 : 10);
+                    asteroids.push(new Asteroid(randomRadius));
+                    
+                    if (Math.random() < 0.1) {
+                        enemyShips.push(new EnemyShip());
+                    }
+                    lastAsteroidSpawnTime = currentTime;
+                }
+            }
+
+            function checkHealthRefillerSpawn() {
+                if (score >= nextHealthRefillerScore) {
+                    healthRefillers.push(new HealthRefiller());
+                    nextHealthRefillerScore += 250;
+                }
+            }
+            
+            function checkCollisions() {
+                // Asteroid and Spaceship collision
+                asteroids.forEach((asteroid, aIndex) => {
+                    const distance = Math.sqrt(Math.pow(spaceship.x - asteroid.x, 2) + Math.pow(spaceship.y - asteroid.y, 2));
+                    if (distance < spaceship.radius + asteroid.radius) {
+                        if (!isShieldActive) {
+                            health -= 2;
+                            if (health <= 0) endGame();
+                        }
+                        asteroids.splice(aIndex, 1);
+                        updateUI();
+                    }
+                });
+
+                // EnemyShip and Spaceship collision
+                enemyShips.forEach((enemy, eIndex) => {
+                    const distance = Math.sqrt(Math.pow(spaceship.x - enemy.x, 2) + Math.pow(spaceship.y - enemy.y, 2));
+                    if (distance < spaceship.radius + enemy.width / 2) {
+                        if (!isShieldActive) {
+                            health -= 20;
+                            if (health <= 0) endGame();
+                        }
+                        enemyShips.splice(eIndex, 1);
+                        updateUI();
+                    }
+                });
+
+                // Bullet and Asteroid collision
+                bullets.forEach((bullet, bIndex) => {
+                    for (let aIndex = 0; aIndex < asteroids.length; aIndex++) {
+                        const asteroid = asteroids[aIndex];
+                        const distance = Math.sqrt(Math.pow(bullet.x - asteroid.x, 2) + Math.pow(bullet.y - asteroid.y, 2));
+                        if (distance < bullet.radius + asteroid.radius) {
+                            bullets.splice(bIndex, 1);
+                            handleExplosion(asteroid.x, asteroid.y);
+                            score += asteroid.points;
+                            health -= 1;
+                            asteroids.splice(aIndex, 1);
+                            updateUI();
+                            return;
+                        }
+                    }
+                });
+
+                // Bullet and EnemyShip collision
+                bullets.forEach((bullet, bIndex) => {
+                    for (let eIndex = 0; eIndex < enemyShips.length; eIndex++) {
+                        const enemy = enemyShips[eIndex];
+                        const distance = Math.sqrt(Math.pow(bullet.x - enemy.x, 2) + Math.pow(bullet.y - enemy.y, 2));
+                        if (distance < bullet.radius + enemy.width / 2) {
+                            bullets.splice(bIndex, 1);
+                            enemy.health -= 1;
+                            if (enemy.health <= 0) {
+                                score += 50;
+                                enemyShips.splice(eIndex, 1);
+                            }
+                            updateUI();
+                            return;
+                        }
+                    }
+                });
+
+                // Enemy bullet and Spaceship collision
+                enemyBullets.forEach((bullet, bIndex) => {
+                    const distance = Math.sqrt(Math.pow(spaceship.x - bullet.x, 2) + Math.pow(spaceship.y - bullet.y, 2));
+                    if (distance < spaceship.radius + bullet.radius) {
+                        if (!isShieldActive) {
+                            health -= 5;
+                            if (health <= 0) endGame();
+                        }
+                        enemyBullets.splice(bIndex, 1);
+                        updateUI();
+                    }
+                });
+                
+                // --- NEW LOGIC: Bullet and Health Refiller collision ---
+                bullets.forEach((bullet, bIndex) => {
+                    for (let rIndex = 0; rIndex < healthRefillers.length; rIndex++) {
+                        const refiller = healthRefillers[rIndex];
+                        const distance = Math.sqrt(Math.pow(bullet.x - refiller.x, 2) + Math.pow(bullet.y - refiller.y, 2));
+                        if (distance < bullet.radius + refiller.width / 2) {
+                            bullets.splice(bIndex, 1); // Remove the bullet
+                            refiller.health -= 1; // Decrease refiller health
+                            
+                            if (refiller.health <= 0) {
+                                health = 100; // Restore player health to 100%
+                                healthRefillers.splice(rIndex, 1); // Remove the refiller
+                            }
+                            updateUI();
+                            return; // Exit inner loop
+                        }
+                    }
+                });
+            }
+
+            function applyPowerUp(type) {
+                clearTimeout(activePowerUpTimeout);
+                deactivatePowerUps();
+                if (type === PowerUpType.SHIELD) {
+                    isShieldActive = true;
+                } else if (type === PowerUpType.RAPID_FIRE) {
+                    isRapidFireActive = true;
+                    fireInterval = 100;
+                } else if (type === PowerUpType.TRIPLE_SHOT) {
+                    isTripleShotActive = true;
+                }
+                activePowerUpTimeout = setTimeout(() => {
+                    deactivatePowerUps();
+                }, powerUpDuration);
+                updateUI();
+                disableButtons();
+            }
+
+            function deactivatePowerUps() {
+                isShieldActive = false;
+                isRapidFireActive = false;
+                isTripleShotActive = false;
+                fireInterval = 250;
+            }
+
+            function updateUI() {
+                scoreDisplay.textContent = `Score: ${score}`;
+                healthDisplay.textContent = `Health: ${health}`;
+                levelDisplay.textContent = `Level: ${level}`;
+            }
+
+            function endGame() {
+                gameRunning = false;
+                cancelAnimationFrame(animationFrameId);
+                finalScoreDisplay.textContent = score;
+                gameOverScreen.style.display = 'block';
+                saveHighScore(score);
+                getHighScores();
+            }
+
+            function checkLevelUp() {
+                if (score >= level * 500) {
+                    level++;
+                    showLevelUpMessage(`Level ${level} Complete!`);
+                }
+            }
+            
+            // --- NEW LOGIC: Blinking ready power-up buttons ---
+            function checkPowerUpAvailability() {
+                if (score >= nextPowerUpScore) {
+                    enableButtons();
+                    // Add blinking class if not already there
+                    if (!shieldBtn.classList.contains('blinking-ready')) {
+                        shieldBtn.classList.add('blinking-ready');
+                        rapidFireBtn.classList.add('blinking-ready');
+                        tripleShotBtn.classList.add('blinking-ready');
+                    }
+                }
+            }
+
+            function disableButtons() {
+                shieldBtn.disabled = true;
+                rapidFireBtn.disabled = true;
+                tripleShotBtn.disabled = true;
+                // Deactivate blinking effect
+                deactivateBlinking();
+            }
+
+            function enableButtons() {
+                shieldBtn.disabled = false;
+                rapidFireBtn.disabled = false;
+                tripleShotBtn.disabled = false;
+            }
+            
+            // Function to deactivate the blinking effect
+            function deactivateBlinking() {
+                shieldBtn.classList.remove('blinking-ready');
+                rapidFireBtn.classList.remove('blinking-ready');
+                tripleShotBtn.classList.remove('blinking-ready');
+            }
+
+            function showLevelUpMessage(message) {
+                gameRunning = false;
+                levelUpMessage.textContent = message;
+                levelUpMessage.style.display = 'block';
+                setTimeout(() => {
+                    levelUpMessage.style.display = 'none';
+                    gameRunning = true;
+                    gameLoop();
+                }, 2000);
+            }
+
+            const mouse = {
+                x: canvas.width / 2,
+                y: canvas.height / 2
+            };
+            
+            canvas.addEventListener('mousemove', (e) => {
+                const rect = canvas.getBoundingClientRect();
+                mouse.x = e.clientX - rect.left;
+                mouse.y = e.clientY - rect.top;
+            });
+
+            let touchMove = false;
+            canvas.addEventListener('touchstart', (e) => {
+                e.preventDefault();
+                touchMove = false;
+                const rect = canvas.getBoundingClientRect();
+                const touch = e.touches[0];
+                mouse.x = touch.clientX - rect.left;
+                mouse.y = touch.clientY - rect.top;
+                fireBullet();
+            });
+
+            canvas.addEventListener('touchmove', (e) => {
+                e.preventDefault();
+                touchMove = true;
+                const rect = canvas.getBoundingClientRect();
+                const touch = e.touches[0];
+                mouse.x = touch.clientX - rect.left;
+                mouse.y = touch.clientY - rect.y;
+            });
+
+            canvas.addEventListener('touchend', (e) => {
+                touchMove = false;
+            });
+
+            function fireBullet() {
+                const currentTime = Date.now();
+                if (currentTime - lastFireTime > fireInterval) {
+                    if (isTripleShotActive) {
+                        bullets.push(new Bullet(spaceship.x, spaceship.y, spaceship.angle - 0.2));
+                        bullets.push(new Bullet(spaceship.x, spaceship.y, spaceship.angle));
+                        bullets.push(new Bullet(spaceship.x, spaceship.y, spaceship.angle + 0.2));
+                    } else {
+                        bullets.push(new Bullet(spaceship.x, spaceship.y, spaceship.angle));
+                    }
+                    lastFireTime = currentTime;
+                }
+            }
+
+            document.addEventListener('keydown', (e) => {
+                keys[e.key] = true;
+                if (e.key === ' ' && gameRunning) {
+                    fireBullet();
+                }
+            });
+
+            document.addEventListener('keyup', (e) => {
+                keys[e.key] = false;
+            });
+
+            shieldBtn.addEventListener('click', () => {
+                if (!shieldBtn.disabled) {
+                    applyPowerUp(PowerUpType.SHIELD);
+                    nextPowerUpScore += 450;
+                    updateUI();
+                    deactivateBlinking(); // Deactivate blinking when used
+                }
+            });
+
+            rapidFireBtn.addEventListener('click', () => {
+                if (!rapidFireBtn.disabled) {
+                    applyPowerUp(PowerUpType.RAPID_FIRE);
+                    nextPowerUpScore += 450;
+                    updateUI();
+                    deactivateBlinking(); // Deactivate blinking when used
+                }
+            });
+
+            tripleShotBtn.addEventListener('click', () => {
+                if (!tripleShotBtn.disabled) {
+                    applyPowerUp(PowerUpType.TRIPLE_SHOT);
+                    nextPowerUpScore += 450;
+                    updateUI();
+                    deactivateBlinking(); // Deactivate blinking when used
+                }
+            });
+
+            function gameLoop() {
+                if (!gameRunning) return;
+                ctx.clearRect(0, 0, canvas.width, canvas.height);
+                updateSpaceship();
+                drawSpaceship();
+
+                bullets.forEach(bullet => {
+                    bullet.update();
+                    bullet.draw();
+                });
+
+                enemyBullets.forEach(bullet => {
+                    bullet.update();
+                    bullet.draw();
+                });
+
+                asteroids.forEach(asteroid => {
+                    asteroid.update();
+                    asteroid.draw();
+                });
+
+                enemyShips.forEach(enemy => {
+                    enemy.update();
+                    enemy.draw();
+                });
+
+                healthRefillers.forEach(refiller => {
+                    refiller.update();
+                    refiller.draw();
+                });
+
+                particles.forEach(particle => {
+                    particle.update();
+                    particle.draw();
+                });
+
+                bullets = bullets.filter(bullet => bullet.x > 0 && bullet.x < canvas.width && bullet.y > 0 && bullet.y < canvas.height);
+                enemyBullets = enemyBullets.filter(bullet => bullet.x > 0 && bullet.x < canvas.width && bullet.y > 0 && bullet.y < canvas.height);
+                particles = particles.filter(particle => particle.life > 0);
+                asteroids = asteroids.filter(asteroid => asteroid.x > -100 && asteroid.x < canvas.width + 100 && asteroid.y > -100 && asteroid.y < canvas.height + 100);
+                healthRefillers = healthRefillers.filter(refiller => refiller.y < canvas.height + 100);
+
+                checkCollisions();
+                spawnAsteroids();
+                checkLevelUp();
+                checkPowerUpAvailability();
+                checkHealthRefillerSpawn();
+                animationFrameId = requestAnimationFrame(gameLoop);
+            }
+
+            startButton.addEventListener('click', () => {
+                instructions.style.display = 'none';
+                gameRunning = true;
+                startGame();
+            });
+
+            function startGame() {
+                setCanvasSizeAndScale();
+                score = 0;
+                health = 100;
+                level = 1;
+                asteroids = [];
+                bullets = [];
+                enemyShips = [];
+                enemyBullets = [];
+                particles = [];
+                healthRefillers = [];
+                deactivatePowerUps();
+                nextPowerUpScore = 450;
+                nextHealthRefillerScore = 300;
+                updateUI();
+                disableButtons();
+                gameLoop();
+            }
+
+            let animationFrameId;
+            setCanvasSizeAndScale();
+            spaceship.x = canvas.width / 2;
+            spaceship.y = canvas.height / 2;
+
+            window.addEventListener('resize', () => {
+                setCanvasSizeAndScale();
+                spaceship.x = canvas.width / 2;
+                spaceship.y = canvas.height / 2;
+                if (gameRunning) {
+                    cancelAnimationFrame(animationFrameId);
+                    gameLoop();
+                }
+            });
+        });
+    </script>
+</body>
+</html>
