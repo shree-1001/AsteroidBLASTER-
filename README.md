@@ -1,5 +1,5 @@
 ### 🚀 Asteroid BLASTER 🛡️💥  
-## Responsive Space Shooter Game with Firebase Leaderboard
+Responsive Space Shooter Game with Firebase Leaderboard
 
 ---
 
